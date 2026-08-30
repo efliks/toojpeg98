@@ -18,10 +18,10 @@ namespace // anonymous namespace to hide local functions / constants / etc.
 {
 // ////////////////////////////////////////
 // data types
-using uint8_t  = unsigned char;
-using uint16_t = unsigned short;
-using  int16_t =          short;
-using  int32_t =          int; // at least four bytes
+typedef unsigned char  uint8_t;
+typedef unsigned short uint16_t;
+typedef          short  int16_t;
+typedef          int    int32_t; // at least four bytes
 
 // ////////////////////////////////////////
 // constants
@@ -97,7 +97,7 @@ const int16_t CodeWordLimit = 2048; // +/-2^11, maximum value after DCT
 // represent a single Huffman code
 struct BitCode
 {
-  BitCode() = default; // undefined state, must be initialized at a later time
+  BitCode() {} // undefined state, must be initialized at a later time
   BitCode(uint16_t code_, uint8_t numBits_)
   : code(code_), numBits(numBits_) {}
   uint16_t code;       // JPEG's Huffman codes are limited to 16 bits
@@ -115,8 +115,9 @@ struct BitWriter
   // store the most recently encoded bits that are not written yet
   struct BitBuffer
   {
-    int32_t data    = 0; // actually only at most 24 bits are used
-    uint8_t numBits = 0; // number of valid bits (the right-most bits)
+    BitBuffer() : data(0), numBits(0) {}
+    int32_t data;    // actually only at most 24 bits are used
+    uint8_t numBits; // number of valid bits (the right-most bits)
   } buffer;
 
   // write Huffman bits stored in BitCode, keep excess bits in BitBuffer
@@ -132,7 +133,7 @@ struct BitWriter
     {
       // extract highest 8 bits
       buffer.numBits -= 8;
-      auto oneByte = uint8_t(buffer.data >> buffer.numBits);
+      uint8_t oneByte = uint8_t(buffer.data >> buffer.numBits);
       output(oneByte);
 
       if (oneByte == 0xFF) // 0xFF has a special meaning for JPEGs (it's a block marker)
@@ -164,8 +165,8 @@ struct BitWriter
   template <typename T, int Size>
   BitWriter& operator<<(T (&manyBytes)[Size])
   {
-    for (auto c : manyBytes)
-      output(c);
+    for (int i = 0; i < Size; i++)
+      output(manyBytes[i]);
     return *this;
   }
 
@@ -205,45 +206,45 @@ float rgb2cr(float r, float g, float b) { return +0.5f     * r -0.41869f * g -0.
 // forward DCT computation "in one dimension" (fast AAN algorithm by Arai, Agui and Nakajima: "A fast DCT-SQ scheme for images")
 void DCT(float block[8*8], uint8_t stride) // stride must be 1 (=horizontal) or 8 (=vertical)
 {
-  const auto SqrtHalfSqrt = 1.306562965f; //    sqrt((2 + sqrt(2)) / 2) = cos(pi * 1 / 8) * sqrt(2)
-  const auto InvSqrt      = 0.707106781f; // 1 / sqrt(2)                = cos(pi * 2 / 8)
-  const auto HalfSqrtSqrt = 0.382683432f; //     sqrt(2 - sqrt(2)) / 2  = cos(pi * 3 / 8)
-  const auto InvSqrtSqrt  = 0.541196100f; // 1 / sqrt(2 - sqrt(2))      = cos(pi * 3 / 8) * sqrt(2)
+  const float SqrtHalfSqrt = 1.306562965f; //    sqrt((2 + sqrt(2)) / 2) = cos(pi * 1 / 8) * sqrt(2)
+  const float InvSqrt      = 0.707106781f; // 1 / sqrt(2)                = cos(pi * 2 / 8)
+  const float HalfSqrtSqrt = 0.382683432f; //     sqrt(2 - sqrt(2)) / 2  = cos(pi * 3 / 8)
+  const float InvSqrtSqrt  = 0.541196100f; // 1 / sqrt(2 - sqrt(2))      = cos(pi * 3 / 8) * sqrt(2)
 
   // modify in-place
-  auto& block0 = block[0         ];
-  auto& block1 = block[1 * stride];
-  auto& block2 = block[2 * stride];
-  auto& block3 = block[3 * stride];
-  auto& block4 = block[4 * stride];
-  auto& block5 = block[5 * stride];
-  auto& block6 = block[6 * stride];
-  auto& block7 = block[7 * stride];
+  float& block0 = block[0         ];
+  float& block1 = block[1 * stride];
+  float& block2 = block[2 * stride];
+  float& block3 = block[3 * stride];
+  float& block4 = block[4 * stride];
+  float& block5 = block[5 * stride];
+  float& block6 = block[6 * stride];
+  float& block7 = block[7 * stride];
 
   // based on https://dev.w3.org/Amaya/libjpeg/jfdctflt.c , the original variable names can be found in my comments
-  auto add07 = block0 + block7; auto sub07 = block0 - block7; // tmp0, tmp7
-  auto add16 = block1 + block6; auto sub16 = block1 - block6; // tmp1, tmp6
-  auto add25 = block2 + block5; auto sub25 = block2 - block5; // tmp2, tmp5
-  auto add34 = block3 + block4; auto sub34 = block3 - block4; // tmp3, tmp4
+  float add07 = block0 + block7; float sub07 = block0 - block7; // tmp0, tmp7
+  float add16 = block1 + block6; float sub16 = block1 - block6; // tmp1, tmp6
+  float add25 = block2 + block5; float sub25 = block2 - block5; // tmp2, tmp5
+  float add34 = block3 + block4; float sub34 = block3 - block4; // tmp3, tmp4
 
-  auto add0347 = add07 + add34; auto sub07_34 = add07 - add34; // tmp10, tmp13 ("even part" / "phase 2")
-  auto add1256 = add16 + add25; auto sub16_25 = add16 - add25; // tmp11, tmp12
+  float add0347 = add07 + add34; float sub07_34 = add07 - add34; // tmp10, tmp13 ("even part" / "phase 2")
+  float add1256 = add16 + add25; float sub16_25 = add16 - add25; // tmp11, tmp12
 
   block0 = add0347 + add1256; block4 = add0347 - add1256; // "phase 3"
 
-  auto z1 = (sub16_25 + sub07_34) * InvSqrt; // all temporary z-variables kept their original names
+  float z1 = (sub16_25 + sub07_34) * InvSqrt; // all temporary z-variables kept their original names
   block2 = sub07_34 + z1; block6 = sub07_34 - z1; // "phase 5"
 
-  auto sub23_45 = sub25 + sub34; // tmp10 ("odd part" / "phase 2")
-  auto sub12_56 = sub16 + sub25; // tmp11
-  auto sub01_67 = sub16 + sub07; // tmp12
+  float sub23_45 = sub25 + sub34; // tmp10 ("odd part" / "phase 2")
+  float sub12_56 = sub16 + sub25; // tmp11
+  float sub01_67 = sub16 + sub07; // tmp12
 
-  auto z5 = (sub23_45 - sub01_67) * HalfSqrtSqrt;
-  auto z2 = sub23_45 * InvSqrtSqrt  + z5;
-  auto z3 = sub12_56 * InvSqrt;
-  auto z4 = sub01_67 * SqrtHalfSqrt + z5;
-  auto z6 = sub07 + z3; // z11 ("phase 5")
-  auto z7 = sub07 - z3; // z13
+  float z5 = (sub23_45 - sub01_67) * HalfSqrtSqrt;
+  float z2 = sub23_45 * InvSqrtSqrt  + z5;
+  float z3 = sub12_56 * InvSqrt;
+  float z4 = sub01_67 * SqrtHalfSqrt + z5;
+  float z6 = sub07 + z3; // z11 ("phase 5")
+  float z7 = sub07 - z3; // z13
   block1 = z6 + z4; block7 = z6 - z4; // "phase 6"
   block5 = z7 + z2; block3 = z7 - z2;
 }
@@ -253,28 +254,28 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
                     const BitCode huffmanDC[256], const BitCode huffmanAC[256], const BitCode* codewords)
 {
   // "linearize" the 8x8 block, treat it as a flat array of 64 floats
-  auto block64 = (float*) block;
+  float* block64 = (float*) block;
 
   // DCT: rows
-  for (auto offset = 0; offset < 8; offset++)
+  for (int offset = 0; offset < 8; offset++)
     DCT(block64 + offset*8, 1);
   // DCT: columns
-  for (auto offset = 0; offset < 8; offset++)
+  for (int offset = 0; offset < 8; offset++)
     DCT(block64 + offset*1, 8);
 
   // scale
-  for (auto i = 0; i < 8*8; i++)
+  for (int i = 0; i < 8*8; i++)
     block64[i] *= scaled[i];
 
   // encode DC (the first coefficient is the "average color" of the 8x8 block)
-  auto DC = int(block64[0] + (block64[0] >= 0 ? +0.5f : -0.5f)); // C++11's nearbyint() achieves a similar effect
+  int DC = int(block64[0] + (block64[0] >= 0 ? +0.5f : -0.5f)); // C++11's nearbyint() achieves a similar effect
 
   // quantize and zigzag the other 63 coefficients
-  auto posNonZero = 0; // find last coefficient which is not zero (because trailing zeros are encoded differently)
+  int posNonZero = 0; // find last coefficient which is not zero (because trailing zeros are encoded differently)
   int16_t quantized[8*8];
-  for (auto i = 1; i < 8*8; i++) // start at 1 because block64[0]=DC was already processed
+  for (int i = 1; i < 8*8; i++) // start at 1 because block64[0]=DC was already processed
   {
-    auto value = block64[ZigZagInv[i]];
+    float value = block64[ZigZagInv[i]];
     // round to nearest integer
     quantized[i] = int(value + (value >= 0 ? +0.5f : -0.5f)); // C++11's nearbyint() achieves a similar effect
     // remember offset of last non-zero coefficient
@@ -283,18 +284,18 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
   }
 
   // same "average color" as previous block ?
-  auto diff = DC - lastDC;
+  int diff = DC - lastDC;
   if (diff == 0)
     writer << huffmanDC[0x00];   // yes, write a special short symbol
   else
   {
-    auto bits = codewords[diff]; // nope, encode the difference to previous block's average color
+    BitCode bits = codewords[diff]; // nope, encode the difference to previous block's average color
     writer << huffmanDC[bits.numBits] << bits;
   }
 
   // encode ACs (quantized[1..63])
-  auto offset = 0; // upper 4 bits count the number of consecutive zeros
-  for (auto i = 1; i <= posNonZero; i++) // quantized[0] was already written, skip all trailing zeros, too
+  int offset = 0; // upper 4 bits count the number of consecutive zeros
+  for (int i = 1; i <= posNonZero; i++) // quantized[0] was already written, skip all trailing zeros, too
   {
     // zeros are encoded in a special way
     while (quantized[i] == 0) // found another zero ?
@@ -309,7 +310,7 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
       i++;
     }
 
-    auto encoded = codewords[quantized[i]];
+    BitCode encoded = codewords[quantized[i]];
     // combine number of zeros with the number of bits of the next non-zero value
     writer << huffmanAC[offset + encoded.numBits] << encoded; // and the value itself
     offset = 0;
@@ -327,11 +328,11 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
 void generateHuffmanTable(const uint8_t numCodes[16], const uint8_t* values, BitCode result[256])
 {
   // process all bitsizes 1 thru 16, no JPEG Huffman code is allowed to exceed 16 bits
-  auto huffmanCode = 0;
-  for (auto numBits = 1; numBits <= 16; numBits++)
+  int huffmanCode = 0;
+  for (int numBits = 1; numBits <= 16; numBits++)
   {
     // ... and each code of these bitsizes
-    for (auto i = 0; i < numCodes[numBits - 1]; i++) // note: numCodes array starts at zero, but smallest bitsize is 1
+    for (int i = 0; i < numCodes[numBits - 1]; i++) // note: numCodes array starts at zero, but smallest bitsize is 1
       result[*values++] = BitCode(huffmanCode++, numBits);
 
     // next Huffman code needs to be one bit wider
@@ -350,14 +351,14 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
                bool isRGB, unsigned char quality_, bool downsample, const char* comment)
 {
   // reject invalid pointers
-  if (output == nullptr || pixels_ == nullptr)
+  if (output == 0 || pixels_ == 0)
     return false;
   // check image format
   if (width == 0 || height == 0)
     return false;
 
   // number of components
-  const auto numComponents = isRGB ? 3 : 1;
+  const int numComponents = isRGB ? 3 : 1;
   // note: if there is just one component (=grayscale), then only luminance needs to be stored in the file
   //       thus everything related to chrominance need not to be written to the JPEG
   //       I still compute a few things, like quantization tables to avoid a complete code mess
@@ -384,17 +385,17 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
 
   // ////////////////////////////////////////
   // comment (optional)
-  if (comment != nullptr)
+  if (comment != 0)
   {
     // look for zero terminator
-    auto length = 0; // = strlen(comment);
+    int length = 0; // = strlen(comment);
     while (comment[length] != 0)
       length++;
 
     // write COM marker
     bitWriter.addMarker(0xFE, 2+length); // block size is number of bytes (without zero terminator) + 2 bytes for this length field
     // ... and write the comment itself
-    for (auto i = 0; i < length; i++)
+    for (int i = 0; i < length; i++)
       bitWriter << comment[i];
   }
 
@@ -402,13 +403,13 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
   // adjust quantization tables to desired quality
 
   // quality level must be in 1 ... 100
-  auto quality = clamp<uint16_t>(quality_, 1, 100);
+  uint16_t quality = clamp<uint16_t>(quality_, 1, 100);
   // convert to an internal JPEG quality factor, formula taken from libjpeg
   quality = quality < 50 ? 5000 / quality : 200 - quality * 2;
 
   uint8_t quantLuminance  [8*8];
   uint8_t quantChrominance[8*8];
-  for (auto i = 0; i < 8*8; i++)
+  for (int i = 0; i < 8*8; i++)
   {
     int luminance   = (DefaultQuantLuminance  [ZigZagInv[i]] * quality + 50) / 100;
     int chrominance = (DefaultQuantChrominance[ZigZagInv[i]] * quality + 50) / 100;
@@ -438,7 +439,7 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
 
   // sampling and quantization tables for each component
   bitWriter << numComponents;       // 1 component (grayscale, Y only) or 3 components (Y,Cb,Cr)
-  for (auto id = 1; id <= numComponents; id++)
+  for (int id = 1; id <= numComponents; id++)
     bitWriter <<  id                // component ID (Y=1, Cb=2, Cr=3)
     // bitmasks for sampling: highest 4 bits: horizontal, lowest 4 bits: vertical
               << (id == 1 && downsample ? 0x22 : 0x11) // 0x11 is default YCbCr 4:4:4 and 0x22 stands for YCbCr 4:2:0
@@ -493,7 +494,7 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
 
   // assign Huffman tables to each component
   bitWriter << numComponents;
-  for (auto id = 1; id <= numComponents; id++)
+  for (int id = 1; id <= numComponents; id++)
     // highest 4 bits: DC Huffman table, lowest 4 bits: AC Huffman table
     bitWriter << id << (id == 1 ? 0x00 : 0x11); // Y: tables 0 for DC and AC; Cb + Cr: tables 1 for DC and AC
 
@@ -505,14 +506,14 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
   // adjust quantization tables with AAN scaling factors to simplify DCT
   float scaledLuminance  [8*8];
   float scaledChrominance[8*8];
-  for (auto i = 0; i < 8*8; i++)
+  for (int i = 0; i < 8*8; i++)
   {
-    auto row    = ZigZagInv[i] / 8; // same as ZigZagInv[i] >> 3
-    auto column = ZigZagInv[i] % 8; // same as ZigZagInv[i] &  7
+    int row    = ZigZagInv[i] / 8; // same as ZigZagInv[i] >> 3
+    int column = ZigZagInv[i] % 8; // same as ZigZagInv[i] &  7
 
     // scaling constants for AAN DCT algorithm: AanScaleFactors[0] = 1, AanScaleFactors[k=1..7] = cos(k*PI/16) * sqrt(2)
     static const float AanScaleFactors[8] = { 1, 1.387039845f, 1.306562965f, 1.175875602f, 1, 0.785694958f, 0.541196100f, 0.275899379f };
-    auto factor = 1 / (AanScaleFactors[row] * AanScaleFactors[column] * 8);
+    float factor = 1 / (AanScaleFactors[row] * AanScaleFactors[column] * 8);
     scaledLuminance  [ZigZagInv[i]] = factor / quantLuminance  [i];
     scaledChrominance[ZigZagInv[i]] = factor / quantChrominance[i];
     // if you really want JPEGs that are bitwise identical to Jon Olick's code then you need slightly different formulas (note: sqrt(8) = 2.828427125f)
@@ -541,38 +542,38 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
   }
 
   // just convert image data from void*
-  auto pixels = (const uint8_t*)pixels_;
+  const uint8_t* pixels = (const uint8_t*)pixels_;
 
   // the next two variables are frequently used when checking for image borders
-  const auto maxWidth  = width  - 1; // "last row"
-  const auto maxHeight = height - 1; // "bottom line"
+  const int maxWidth  = width  - 1; // "last row"
+  const int maxHeight = height - 1; // "bottom line"
 
   // process MCUs (minimum codes units) => image is subdivided into a grid of 8x8 or 16x16 tiles
-  const auto sampling = downsample ? 2 : 1; // 1x1 or 2x2 sampling
-  const auto mcuSize  = 8 * sampling;
+  const int sampling = downsample ? 2 : 1; // 1x1 or 2x2 sampling
+  const int mcuSize  = 8 * sampling;
 
   // average color of the previous MCU
   int16_t lastYDC = 0, lastCbDC = 0, lastCrDC = 0;
   // convert from RGB to YCbCr
   float Y[8][8], Cb[8][8], Cr[8][8];
 
-  for (auto mcuY = 0; mcuY < height; mcuY += mcuSize) // each step is either 8 or 16 (=mcuSize)
-    for (auto mcuX = 0; mcuX < width; mcuX += mcuSize)
+  for (int mcuY = 0; mcuY < height; mcuY += mcuSize) // each step is either 8 or 16 (=mcuSize)
+    for (int mcuX = 0; mcuX < width; mcuX += mcuSize)
     {
       // YCbCr 4:4:4 format: each MCU is a 8x8 block - the same applies to grayscale images, too
       // YCbCr 4:2:0 format: each MCU represents a 16x16 block, stored as 4x 8x8 Y-blocks plus 1x 8x8 Cb and 1x 8x8 Cr block)
-      for (auto blockY = 0; blockY < mcuSize; blockY += 8) // iterate once (YCbCr444 and grayscale) or twice (YCbCr420)
-        for (auto blockX = 0; blockX < mcuSize; blockX += 8)
+      for (int blockY = 0; blockY < mcuSize; blockY += 8) // iterate once (YCbCr444 and grayscale) or twice (YCbCr420)
+        for (int blockX = 0; blockX < mcuSize; blockX += 8)
         {
           // now we finally have an 8x8 block ...
-          for (auto deltaY = 0; deltaY < 8; deltaY++)
+          for (int deltaY = 0; deltaY < 8; deltaY++)
           {
-            auto column = minimum(mcuX + blockX         , maxWidth); // must not exceed image borders, replicate last row/column if needed
-            auto row    = minimum(mcuY + blockY + deltaY, maxHeight);
-            for (auto deltaX = 0; deltaX < 8; deltaX++)
+            int column = minimum(mcuX + blockX         , maxWidth); // must not exceed image borders, replicate last row/column if needed
+            int row    = minimum(mcuY + blockY + deltaY, maxHeight);
+            for (int deltaX = 0; deltaX < 8; deltaX++)
             {
               // find actual pixel position within the current image
-              auto pixelPos = row * int(width) + column; // the cast ensures that we don't run into multiplication overflows
+              int pixelPos = row * int(width) + column; // the cast ensures that we don't run into multiplication overflows
               if (column < maxWidth)
                 column++;
 
@@ -584,9 +585,9 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
               }
 
               // RGB: 3 bytes per pixel (whereas grayscale images have only 1 byte per pixel)
-              auto r = pixels[3 * pixelPos    ];
-              auto g = pixels[3 * pixelPos + 1];
-              auto b = pixels[3 * pixelPos + 2];
+              uint8_t r = pixels[3 * pixelPos    ];
+              uint8_t g = pixels[3 * pixelPos + 1];
+              uint8_t b = pixels[3 * pixelPos + 2];
 
               Y   [deltaY][deltaX] = rgb2y (r, g, b) - 128; // again, the JPEG standard requires Y to be shifted by 128
               // YCbCr444 is easy - the more complex YCbCr420 has to be computed about 20 lines below in a second pass
@@ -613,25 +614,25 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
       if (downsample)
         for (short deltaY = 7; downsample && deltaY >= 0; deltaY--) // iterating loop in reverse increases cache read efficiency
         {
-          auto row      = minimum(mcuY + 2*deltaY, maxHeight); // each deltaX/Y step covers a 2x2 area
-          auto column   =         mcuX;                        // column is updated inside next loop
-          auto pixelPos = (row * int(width) + column) * 3;     // numComponents = 3
+          int row      = minimum(mcuY + 2*deltaY, maxHeight); // each deltaX/Y step covers a 2x2 area
+          int column   =         mcuX;                        // column is updated inside next loop
+          int pixelPos = (row * int(width) + column) * 3;     // numComponents = 3
 
           // deltas (in bytes) to next row / column, must not exceed image borders
-          auto rowStep    = (row    < maxHeight) ? 3 * int(width) : 0; // always numComponents*width except for bottom    line
-          auto columnStep = (column < maxWidth ) ? 3              : 0; // always numComponents       except for rightmost pixel
+          int rowStep    = (row    < maxHeight) ? 3 * int(width) : 0; // always numComponents*width except for bottom    line
+          int columnStep = (column < maxWidth ) ? 3              : 0; // always numComponents       except for rightmost pixel
 
           for (short deltaX = 0; deltaX < 8; deltaX++)
           {
             // let's add all four samples (2x2 area)
-            auto right     = pixelPos + columnStep;
-            auto down      = pixelPos +              rowStep;
-            auto downRight = pixelPos + columnStep + rowStep;
+            int right     = pixelPos + columnStep;
+            int down      = pixelPos +              rowStep;
+            int downRight = pixelPos + columnStep + rowStep;
 
             // note: cast from 8 bits to >8 bits to avoid overflows when adding
-            auto r = short(pixels[pixelPos    ]) + pixels[right    ] + pixels[down    ] + pixels[downRight    ];
-            auto g = short(pixels[pixelPos + 1]) + pixels[right + 1] + pixels[down + 1] + pixels[downRight + 1];
-            auto b = short(pixels[pixelPos + 2]) + pixels[right + 2] + pixels[down + 2] + pixels[downRight + 2];
+            int r = short(pixels[pixelPos    ]) + pixels[right    ] + pixels[down    ] + pixels[downRight    ];
+            int g = short(pixels[pixelPos + 1]) + pixels[right + 1] + pixels[down + 1] + pixels[downRight + 1];
+            int b = short(pixels[pixelPos + 2]) + pixels[right + 2] + pixels[down + 2] + pixels[downRight + 2];
 
             // convert to Cb and Cr
             Cb[deltaY][deltaX] = rgb2cb(r, g, b) / 4; // I still have to divide r,g,b by 4 to get their average values

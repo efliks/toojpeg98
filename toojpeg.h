@@ -33,7 +33,7 @@ namespace TooJpeg
   // downsample   - if true then YCbCr 4:2:0 format is used (smaller size, minor quality loss) instead of 4:4:4, not relevant for grayscale
   // comment      - optional JPEG comment (0/NULL if no comment), must not contain ASCII code 0xFF
   bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels, unsigned short width, unsigned short height,
-                 bool isRGB = true, unsigned char quality = 90, bool downsample = false, const char* comment = nullptr);
+                 bool isRGB = true, unsigned char quality = 90, bool downsample = false, const char* comment = 0);
 } // namespace TooJpeg
 
 // My main inspiration was Jon Olick's Minimalistic JPEG writer

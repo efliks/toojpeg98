@@ -1,11 +1,10 @@
 # A JPEG encoder in a single C++ file
 
-*This is a mirror of my library hosted at* https://create.stephan-brumme.com/toojpeg/
+TooJpeg is a compact baseline JPEG/JFIF written by Stephan Brumme. Its interface has only one function: `writeJpeg()` - and that's it !
 
-TooJpeg is a compact baseline JPEG/JFIF writer, written in C++11 (but looks like C for the most part).  
-Its interface has only one function: `writeJpeg()` - and that's it !
+This fork back-ports the original code to C++98, replacing C++11-only constructs with their older equivalents. The goal is to make the library more portable across retro platforms that lack modern compiler support.
 
-My library supports the most common JPEG output color spaces:
+The library supports the most common JPEG output color spaces:
 - YCbCr444,
 - YCbCr420 (=2x2 downsampled) and
 - Y (grayscale)
@@ -20,7 +19,7 @@ Far more details can be found on the project homepage: https://create.stephan-br
 1. create an image with any content you like, e.g. 1024x768, RGB (3 bytes per pixel)
 
 ```cpp
-   auto pixels = new unsigned char[1024*768*3];
+   unsigned char* pixels = new unsigned char[1024*768*3];
 ```
 
 2. define a callback that receives the compressed data byte-by-byte 
