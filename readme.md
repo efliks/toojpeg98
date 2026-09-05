@@ -1,6 +1,6 @@
 # A JPEG encoder in a single C++ file
 
-TooJpeg is a compact baseline JPEG/JFIF written by Stephan Brumme. Its interface has only one function: `writeJpeg()` - and that's it !
+TooJpeg is a compact baseline JPEG/JFIF writer created by Stephan Brumme. Its interface has only one function: `writeJpeg()` - and that's it !
 
 This fork back-ports the original code to C++98, replacing C++11-only constructs with their older equivalents. The goal is to make the library more portable across retro platforms that lack modern compiler support.
 
