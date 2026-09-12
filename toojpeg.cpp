@@ -121,7 +121,7 @@ struct BitWriter
   } buffer;
 
   // write Huffman bits stored in BitCode, keep excess bits in BitBuffer
-  BitWriter& operator<<(const BitCode& data)
+  BitWriter& writeBits(const BitCode& data)
   {
     // append the new bits to those bits leftover from previous call(s)
     buffer.numBits += data.numBits;
@@ -150,22 +150,21 @@ struct BitWriter
   void flush()
   {
     // at most seven set bits needed to "fill" the last byte: 0x7F = binary 0111 1111
-    *this << BitCode(0x7F, 7); // I should set buffer.numBits = 0 but since there are no single bits written after flush() I can safely ignore it
+    writeBits(BitCode(0x7F, 7)); // I should set buffer.numBits = 0 but since there are no single bits written after flush() I can safely ignore it
   }
 
   // NOTE: all the following BitWriter functions IGNORE the BitBuffer and write straight to output !
   // write a single byte
-  BitWriter& operator<<(uint8_t oneByte)
+  BitWriter& writeByte(uint8_t oneByte)
   {
     output(oneByte);
     return *this;
   }
 
   // write an array of bytes
-  template <typename T, int Size>
-  BitWriter& operator<<(T (&manyBytes)[Size])
+  BitWriter& writeArray(const uint8_t* manyBytes, int numBytes)
   {
-    for (int i = 0; i < Size; i++)
+    for (int i = 0; i < numBytes; i++)
       output(manyBytes[i]);
     return *this;
   }
@@ -286,11 +285,11 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
   // same "average color" as previous block ?
   int diff = DC - lastDC;
   if (diff == 0)
-    writer << huffmanDC[0x00];   // yes, write a special short symbol
+    writer.writeBits(huffmanDC[0x00]);   // yes, write a special short symbol
   else
   {
     BitCode bits = codewords[diff]; // nope, encode the difference to previous block's average color
-    writer << huffmanDC[bits.numBits] << bits;
+    writer.writeBits(huffmanDC[bits.numBits]).writeBits(bits);
   }
 
   // encode ACs (quantized[1..63])
@@ -304,7 +303,7 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
       // split into blocks of at most 16 consecutive zeros
       if (offset > 0xF0) // remember, the counter is in the upper 4 bits, 0xF = 15
       {
-        writer << huffmanAC[0xF0]; // 0xF0 is a special code for "16 zeros"
+        writer.writeBits(huffmanAC[0xF0]); // 0xF0 is a special code for "16 zeros"
         offset = 0;
       }
       i++;
@@ -312,13 +311,13 @@ int16_t encodeBlock(BitWriter& writer, float block[8][8], const float scaled[8*8
 
     BitCode encoded = codewords[quantized[i]];
     // combine number of zeros with the number of bits of the next non-zero value
-    writer << huffmanAC[offset + encoded.numBits] << encoded; // and the value itself
+    writer.writeBits(huffmanAC[offset + encoded.numBits]).writeBits(encoded); // and the value itself
     offset = 0;
   }
 
   // send end-of-block code (0x00), only needed if there are trailing zeros
   if (posNonZero < 8*8 - 1) // = 63
-    writer << huffmanAC[0x00];
+    writer.writeBits(huffmanAC[0x00]);
 
   return DC;
 }
@@ -381,7 +380,7 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
         0,                 // no density units specified
         0,1,0,1,           // density: 1 pixel "per pixel" horizontally and vertically
         0,0 };             // no thumbnail (size 0 x 0)
-  bitWriter << HeaderJfif;
+  bitWriter.writeArray(HeaderJfif, sizeof(HeaderJfif));
 
   // ////////////////////////////////////////
   // comment (optional)
@@ -396,7 +395,7 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
     bitWriter.addMarker(0xFE, 2+length); // block size is number of bytes (without zero terminator) + 2 bytes for this length field
     // ... and write the comment itself
     for (int i = 0; i < length; i++)
-      bitWriter << comment[i];
+      bitWriter.writeByte(comment[i]);
   }
 
   // ////////////////////////////////////////
@@ -423,27 +422,27 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
   bitWriter.addMarker(0xDB, 2 + (isRGB ? 2 : 1) * (1 + 8*8)); // length: 65 bytes per table + 2 bytes for this length field
                                                               // each table has 64 entries and is preceded by an ID byte
 
-  bitWriter   << 0x00 << quantLuminance;   // first  quantization table
+  bitWriter.writeByte(0x00).writeArray(quantLuminance, sizeof(quantLuminance));   // first  quantization table
   if (isRGB)
-    bitWriter << 0x01 << quantChrominance; // second quantization table, only relevant for color images
+    bitWriter.writeByte(0x01).writeArray(quantChrominance, sizeof(quantChrominance)); // second quantization table, only relevant for color images
 
   // ////////////////////////////////////////
   // write image infos (SOF0 - start of frame)
   bitWriter.addMarker(0xC0, 2+6+3*numComponents); // length: 6 bytes general info + 3 per channel + 2 bytes for this length field
 
   // 8 bits per channel
-  bitWriter << 0x08
+  bitWriter.writeByte(0x08)
   // image dimensions (big-endian)
-            << (height >> 8) << (height & 0xFF)
-            << (width  >> 8) << (width  & 0xFF);
+           .writeByte(height >> 8).writeByte(height & 0xFF)
+           .writeByte(width  >> 8).writeByte(width  & 0xFF);
 
   // sampling and quantization tables for each component
-  bitWriter << numComponents;       // 1 component (grayscale, Y only) or 3 components (Y,Cb,Cr)
+  bitWriter.writeByte(numComponents);       // 1 component (grayscale, Y only) or 3 components (Y,Cb,Cr)
   for (int id = 1; id <= numComponents; id++)
-    bitWriter <<  id                // component ID (Y=1, Cb=2, Cr=3)
+    bitWriter.writeByte(id)                 // component ID (Y=1, Cb=2, Cr=3)
     // bitmasks for sampling: highest 4 bits: horizontal, lowest 4 bits: vertical
-              << (id == 1 && downsample ? 0x22 : 0x11) // 0x11 is default YCbCr 4:4:4 and 0x22 stands for YCbCr 4:2:0
-              << (id == 1 ? 0 : 1); // use quantization table 0 for Y, table 1 for Cb and Cr
+             .writeByte(id == 1 && downsample ? 0x22 : 0x11) // 0x11 is default YCbCr 4:4:4 and 0x22 stands for YCbCr 4:2:0
+             .writeByte(id == 1 ? 0 : 1); // use quantization table 0 for Y, table 1 for Cb and Cr
 
   // ////////////////////////////////////////
   // Huffman tables
@@ -456,12 +455,12 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
                             //   1+16+162 for the AC chrominance (208 = 1+16+12 + 1+16+162, same as above)
 
   // store luminance's DC+AC Huffman table definitions
-  bitWriter << 0x00 // highest 4 bits: 0 => DC, lowest 4 bits: 0 => Y (baseline)
-            << DcLuminanceCodesPerBitsize
-            << DcLuminanceValues;
-  bitWriter << 0x10 // highest 4 bits: 1 => AC, lowest 4 bits: 0 => Y (baseline)
-            << AcLuminanceCodesPerBitsize
-            << AcLuminanceValues;
+  bitWriter.writeByte(0x00) // highest 4 bits: 0 => DC, lowest 4 bits: 0 => Y (baseline)
+           .writeArray(DcLuminanceCodesPerBitsize, sizeof(DcLuminanceCodesPerBitsize))
+           .writeArray(DcLuminanceValues, sizeof(DcLuminanceValues));
+  bitWriter.writeByte(0x10) // highest 4 bits: 1 => AC, lowest 4 bits: 0 => Y (baseline)
+           .writeArray(AcLuminanceCodesPerBitsize, sizeof(AcLuminanceCodesPerBitsize))
+           .writeArray(AcLuminanceValues, sizeof(AcLuminanceValues));
 
   // compute actual Huffman code tables (see Jon's code for precalculated tables)
   BitCode huffmanLuminanceDC[256];
@@ -475,12 +474,12 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
   if (isRGB)
   {
     // store luminance's DC+AC Huffman table definitions
-    bitWriter << 0x01 // highest 4 bits: 0 => DC, lowest 4 bits: 1 => Cr,Cb (baseline)
-              << DcChrominanceCodesPerBitsize
-              << DcChrominanceValues;
-    bitWriter << 0x11 // highest 4 bits: 1 => AC, lowest 4 bits: 1 => Cr,Cb (baseline)
-              << AcChrominanceCodesPerBitsize
-              << AcChrominanceValues;
+    bitWriter.writeByte(0x01) // highest 4 bits: 0 => DC, lowest 4 bits: 1 => Cr,Cb (baseline)
+             .writeArray(DcChrominanceCodesPerBitsize, sizeof(DcChrominanceCodesPerBitsize))
+             .writeArray(DcChrominanceValues, sizeof(DcChrominanceValues));
+    bitWriter.writeByte(0x11) // highest 4 bits: 1 => AC, lowest 4 bits: 1 => Cr,Cb (baseline)
+             .writeArray(AcChrominanceCodesPerBitsize, sizeof(AcChrominanceCodesPerBitsize))
+             .writeArray(AcChrominanceValues, sizeof(AcChrominanceValues));
 
     // compute actual Huffman code tables (see Jon's code for precalculated tables)
     generateHuffmanTable(DcChrominanceCodesPerBitsize, DcChrominanceValues, huffmanChrominanceDC);
@@ -493,14 +492,14 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
                                                     // then 2 bytes for each component and 3 bytes for spectral selection
 
   // assign Huffman tables to each component
-  bitWriter << numComponents;
+  bitWriter.writeByte(numComponents);
   for (int id = 1; id <= numComponents; id++)
     // highest 4 bits: DC Huffman table, lowest 4 bits: AC Huffman table
-    bitWriter << id << (id == 1 ? 0x00 : 0x11); // Y: tables 0 for DC and AC; Cb + Cr: tables 1 for DC and AC
+    bitWriter.writeByte(id).writeByte(id == 1 ? 0x00 : 0x11); // Y: tables 0 for DC and AC; Cb + Cr: tables 1 for DC and AC
 
   // constant values for our baseline JPEGs (which have a single sequential scan)
   static const uint8_t Spectral[3] = { 0, 63, 0 }; // spectral selection: must be from 0 to 63; successive approximation must be 0
-  bitWriter << Spectral;
+  bitWriter.writeArray(Spectral, sizeof(Spectral));
 
   // ////////////////////////////////////////
   // adjust quantization tables with AAN scaling factors to simplify DCT
@@ -660,7 +659,7 @@ bool writeJpeg(WRITE_ONE_BYTE output, const void* pixels_, unsigned short width,
 
   // ///////////////////////////
   // EOI marker
-  bitWriter << 0xFF << 0xD9; // this marker has no length, therefore I can't use addMarker()
+  bitWriter.writeByte(0xFF).writeByte(0xD9); // this marker has no length, therefore I can't use addMarker()
   return true;
 } // writeJpeg()
 } // namespace TooJpeg
